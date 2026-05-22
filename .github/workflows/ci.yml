@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-lint:
+    name: Test & ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Jest tests
+        run: npm test -- --runInBand
+
+      - name: Block merge on failure
+        if: failure() && github.event_name == 'pull_request'
+        run: |
+          echo "::error::Tests or ESLint failed — merge blocked until fixed."
+          exit 1
+
+  trigger-n8n-on-failure:
+    name: Trigger n8n on failure
+    needs: test-and-lint
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger n8n autofix webhook
+        env:
+          N8N_WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
+          API_SECRET: ${{ secrets.API_SECRET }}
+        run: |
+          if [ -z "$N8N_WEBHOOK_URL" ]; then
+            echo "N8N_WEBHOOK_URL not configured; skipping webhook."
+            exit 0
+          fi
+          curl -fsS -X POST "$N8N_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -H "x-api-secret: ${API_SECRET}" \
+            -d "{\"source\":\"github-actions\",\"repo\":\"${{ github.repository }}\",\"ref\":\"${{ github.ref }}\",\"sha\":\"${{ github.sha }}\",\"event\":\"${{ github.event_name }}\",\"failed\":true}"

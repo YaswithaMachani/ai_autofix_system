@@ -1,0 +1,10 @@
+node_modules/
+logs/*
+!logs/.gitkeep
+*.log
+.env
+coverage/
+.DS_Store
+.autofix-backups/
+dist/
+*.tgz

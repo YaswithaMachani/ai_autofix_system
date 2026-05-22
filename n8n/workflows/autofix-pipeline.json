@@ -1,0 +1,172 @@
+{
+  "name": "AI Autofix Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "owner": "={{$env.GITHUB_OWNER}}",
+        "repository": "={{$env.GITHUB_REPO}}",
+        "events": ["push", "issues", "workflow_run"]
+      },
+      "id": "github-trigger",
+      "name": "GitHub Trigger",
+      "type": "n8n-nodes-base.githubTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3847/api/monitor/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-secret",
+              "value": "={{$env.API_SECRET}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "run-monitor",
+      "name": "Run Monitor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.failed}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "error-detect",
+      "name": "Error Detected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3847/api/autofix/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-secret",
+              "value": "={{$env.API_SECRET}}"
+            }
+          ]
+        },
+        "jsonBody": "={{ { \"force\": false } }}",
+        "options": {}
+      },
+      "id": "ai-fix",
+      "name": "AI Fixing Pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.success}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "fix-success",
+      "name": "Tests Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "resource": "pullRequest",
+        "operation": "get",
+        "owner": "={{$env.GITHUB_OWNER}}",
+        "repository": "={{$env.GITHUB_REPO}}",
+        "pullRequestNumber": "={{$json.publish.prNumber}}"
+      },
+      "id": "github-pr-verify",
+      "name": "GitHub PR Verify",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [1440, 120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.DISCORD_WEBHOOK_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"embeds\": [{ \"title\": \"Autofix Failed\", \"description\": $json.error || \"Validation failed\", \"color\": 16711680 }] } }}",
+        "options": {}
+      },
+      "id": "discord-fail",
+      "name": "Discord Failure Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.DISCORD_WEBHOOK_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"embeds\": [{ \"title\": \"Autofix PR Created\", \"description\": $json.publish.prUrl, \"color\": 65280 }] } }}",
+        "options": {}
+      },
+      "id": "discord-success",
+      "name": "Discord Success Notify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 120]
+    }
+  ],
+  "connections": {
+    "GitHub Trigger": {
+      "main": [[{ "node": "Run Monitor", "type": "main", "index": 0 }]]
+    },
+    "Run Monitor": {
+      "main": [[{ "node": "Error Detected?", "type": "main", "index": 0 }]]
+    },
+    "Error Detected?": {
+      "main": [
+        [{ "node": "AI Fixing Pipeline", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "AI Fixing Pipeline": {
+      "main": [[{ "node": "Tests Passed?", "type": "main", "index": 0 }]]
+    },
+    "Tests Passed?": {
+      "main": [
+        [
+          { "node": "GitHub PR Verify", "type": "main", "index": 0 },
+          { "node": "Discord Success Notify", "type": "main", "index": 0 }
+        ],
+        [{ "node": "Discord Failure Alert", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

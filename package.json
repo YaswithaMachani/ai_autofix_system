@@ -1,0 +1,45 @@
+{
+  "name": "ai-autofix-system",
+  "version": "1.0.0",
+  "description": "AI-powered automatic bug fixing system with OpenAI, GitHub, Docker, and n8n integration",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "start:sample": "node sample-app/index.js",
+    "monitor": "node scripts/monitor.js",
+    "autofix": "node scripts/autofix.js",
+    "sandbox": "node scripts/sandbox.js",
+    "test": "jest --runInBand",
+    "test:all": "jest --runInBand --roots tests sample-app",
+    "test:sample": "jest --runInBand sample-app",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "keywords": [
+    "autofix",
+    "openai",
+    "github",
+    "n8n",
+    "bug-fixing"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.1.1",
+    "dotenv": "^16.5.0",
+    "express": "^4.21.2",
+    "openai": "^4.104.0",
+    "simple-git": "^3.27.0",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1",
+    "jest": "^29.7.0",
+    "supertest": "^7.1.0"
+  }
+}
