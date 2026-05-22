@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "C:\\Users\\yaswitha\\Downloads\\ai_autofix_system-autofix-publish-clean\\ai_autofix_system-autofix-publish-clean\\python-demo\\logs\\.1380c501a8bf4698349f9ed4f6173b94c720218a-audit.json",
+    "files": [
+        {
+            "date": 1779475566344,
+            "name": "C:\\Users\\yaswitha\\Downloads\\ai_autofix_system-autofix-publish-clean\\ai_autofix_system-autofix-publish-clean\\python-demo\\logs\\autofix-2026-05-23.log",
+            "hash": "00c9b66ca593c7d6f5031ed3f7b8def938740ab379c648b2334ff2b5ca077a1c"
+        }
+    ],
+    "hashType": "sha256"
+}

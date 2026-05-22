@@ -1,0 +1,211 @@
+{
+  "name": "AI Autofix CI/CD Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "owner": "={{$env.GITHUB_OWNER}}",
+        "repository": "={{$env.GITHUB_REPO}}",
+        "events": ["push", "pull_request", "workflow_run"]
+      },
+      "id": "step-1-github-trigger",
+      "name": "1. GitHub Trigger",
+      "type": "n8n-nodes-base.githubTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "resource": "repository",
+        "operation": "get",
+        "owner": "={{$env.GITHUB_OWNER}}",
+        "repository": "={{$env.GITHUB_REPO}}"
+      },
+      "id": "step-2-pull-repo",
+      "name": "2. Pull Repository",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "command": "cd /app && git fetch origin {{$env.GITHUB_BASE_BRANCH}} && npm ci && npm test"
+      },
+      "id": "step-3-run-tests",
+      "name": "3. Run Tests",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [640, 300],
+      "notes": "Prefer HTTP call to orchestrator in Docker: POST /api/ci/run-tests"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.ORCHESTRATOR_URL || 'http://orchestrator:3847'}}/api/ci/run-tests",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-secret", "value": "={{$env.API_SECRET}}" }
+          ]
+        }
+      },
+      "id": "step-3b-run-tests-http",
+      "name": "3b. Run Tests (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 480]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.failed}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "step-4-detect-failure",
+      "name": "4. Detect Failure",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [860, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.ORCHESTRATOR_URL || 'http://orchestrator:3847'}}/api/autofix/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-secret", "value": "={{$env.API_SECRET}}" }
+          ]
+        },
+        "options": { "timeout": 300000 }
+      },
+      "id": "step-5-bug-fix",
+      "name": "5. Call Bug-Fix Script",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.ORCHESTRATOR_URL || 'http://orchestrator:3847'}}/api/ci/run-tests",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-secret", "value": "={{$env.API_SECRET}}" }
+          ]
+        }
+      },
+      "id": "step-6-rerun-tests",
+      "name": "6. Rerun Tests",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 280]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.success}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "step-6b-tests-passed",
+      "name": "Tests Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1520, 280]
+    },
+    {
+      "parameters": {
+        "resource": "repository",
+        "operation": "push",
+        "owner": "={{$env.GITHUB_OWNER}}",
+        "repository": "={{$env.GITHUB_REPO}}",
+        "branch": "={{$json.publish.branchName}}"
+      },
+      "id": "step-7-push",
+      "name": "7. Push Fixed Code",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [1740, 180],
+      "notes": "Push handled inside autofix script; node verifies branch autofix/*"
+    },
+    {
+      "parameters": {
+        "resource": "pullRequest",
+        "operation": "get",
+        "owner": "={{$env.GITHUB_OWNER}}",
+        "repository": "={{$env.GITHUB_REPO}}",
+        "pullRequestNumber": "={{$json.publish.prNumber}}"
+      },
+      "id": "step-8-create-pr",
+      "name": "8. Create PR",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [1960, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.DISCORD_WEBHOOK_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"embeds\": [{ \"title\": $json.success ? \"✅ Autofix PR Created\" : \"❌ Autofix Failed\", \"description\": $json.publish?.prUrl || $json.error || \"See logs/pipeline.log\", \"color\": $json.success ? 65280 : 16711680 }] } }}"
+      },
+      "id": "step-9-discord",
+      "name": "9. Discord Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2180, 280]
+    }
+  ],
+  "connections": {
+    "1. GitHub Trigger": {
+      "main": [[{ "node": "2. Pull Repository", "type": "main", "index": 0 }]]
+    },
+    "2. Pull Repository": {
+      "main": [[{ "node": "3b. Run Tests (HTTP)", "type": "main", "index": 0 }]]
+    },
+    "3b. Run Tests (HTTP)": {
+      "main": [[{ "node": "4. Detect Failure", "type": "main", "index": 0 }]]
+    },
+    "4. Detect Failure": {
+      "main": [
+        [{ "node": "5. Call Bug-Fix Script", "type": "main", "index": 0 }],
+        [{ "node": "9. Discord Notification", "type": "main", "index": 0 }]
+      ]
+    },
+    "5. Call Bug-Fix Script": {
+      "main": [[{ "node": "6. Rerun Tests", "type": "main", "index": 0 }]]
+    },
+    "6. Rerun Tests": {
+      "main": [[{ "node": "Tests Passed?", "type": "main", "index": 0 }]]
+    },
+    "Tests Passed?": {
+      "main": [
+        [
+          { "node": "7. Push Fixed Code", "type": "main", "index": 0 },
+          { "node": "8. Create PR", "type": "main", "index": 0 }
+        ],
+        [{ "node": "9. Discord Notification", "type": "main", "index": 0 }]
+      ]
+    },
+    "7. Push Fixed Code": {
+      "main": [[{ "node": "9. Discord Notification", "type": "main", "index": 0 }]]
+    },
+    "8. Create PR": {
+      "main": [[{ "node": "9. Discord Notification", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "ai-autofix-system" }
+}
