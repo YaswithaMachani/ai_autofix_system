@@ -33,6 +33,16 @@ jobs:
       - name: Jest tests
         run: npm test -- --runInBand
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Run Python tests
+        run: |
+          pip install pytest
+          pytest python-demo/test_phone_combinations.py -v
+
       - name: Block merge on failure
         if: failure() && github.event_name == 'pull_request'
         run: |
